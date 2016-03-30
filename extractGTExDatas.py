@@ -3,44 +3,20 @@ from xlwt import *
 from xlutils.copy import *
 import time
 import numpy as np
+import csv
 
-root = '/home/philomene/MFE/'
+import xlsxwriter as xlwriter
 
-GTExRoot = root + 'GTEx/v6/'
+import openpyxl
 
-geneRoot = GTExRoot + 'geneRPKM/'
-transcriptRoot = GTExRoot + 'transcriptRPKM/'
-
-tablesRoot = GTExRoot + 'tables/'
-phenotypeRoot = GTExRoot + 'subjectPhenotypes/'
-
-geneRPKMFileName = geneRoot + 'All_Tissue_Site_Details_Analysis.combined.rpkm.gct'
-geneRPKMFileNameTest = geneRoot + 'All_Tissue_Site_Details_Analysis.combined.rpkm11.gct'
-
-transcriptRPKMFileName = transcriptRoot + 'Flux_SetSummary_Merged.txt'
-transcriptRPKMFileNameTest = transcriptRoot + 'Flux_SetSummary_Merged11.txt'
-
-ARNPhenotypeTableFileName = phenotypeRoot + 'GTEx_Data_V6_Annotations_SubjectPhenotypesDS.xlsx'
-ARNTableFileName = tablesRoot + 'ARNTable.xlsx'
-ARNTableFileNameTest = tablesRoot + 'ARNTableTest.xlsx'
-
-geneTableFileName = tablesRoot + 'geneTable.xlsx'
-geneTableFileNameTest = tablesRoot + 'geneTableTest.xlsx'
-
-transcriptTableFileName = tablesRoot + 'transcriptTable.xlsx'
-transcriptTableFileNameTest = tablesRoot + 'transcriptTableTest.xlsx'
-
-
-transcriptTableFileName = tablesRoot + 'transcriptTable.xlsx'
-transcriptTableFileNameTest = tablesRoot + 'transcriptTableTest.xlsx'
-
+import paths
 
 
 def extractGene(fileName):
     '''Extract SAMPID and GeneID'''
     geneNameList = []
     geneDescriptionList = []
-    ARNList = []
+    sampleList = []
     i = 0
     file = open(fileName,'r')
     for line in file:
@@ -51,7 +27,7 @@ def extractGene(fileName):
             element += c
             if i == 2:
                 if c == '	':
-                    ARNList.append(element)
+                    sampleList.append(element)
                     element = ''
             else:
                 if c == '	':
@@ -63,10 +39,11 @@ def extractGene(fileName):
                     element = ''
                     j+=1
         i += 1
-    return ARNList, geneNameList, geneDescriptionList
+    return sampleList, geneNameList, geneDescriptionList
 
 def extractTranscript(fileName):
     '''extract TranscriptID and chromosome and coord of Gene'''
+    transcriptIDList = []
     geneSymbolList = []
     chromosomesList = []
     coordList = []
@@ -81,6 +58,8 @@ def extractTranscript(fileName):
         for c in line:
             element+=c
             if c == '	':
+                if j == 0:
+                    transcriptIDList.append(element)
                 if j == 1:
                     geneSymbolList.append (element)
                 elif j == 2:
@@ -91,7 +70,10 @@ def extractTranscript(fileName):
                 element =''
                 j+=1
         i+=1
-    return geneSymbolList, chromosomesList, coordList
+    return transcriptIDList, geneSymbolList, chromosomesList, coordList
+
+def extractRPKMGene():
+    return
 
 def cleanList(list, listType):
     '''delete elements of list which not correspond to the type of the list'''
@@ -99,37 +81,38 @@ def cleanList(list, listType):
     for element in list:
         if listType == 'gene':
             comparison = element[0:4] != 'GTEX'
-        elif listType == 'ARN':
+        elif listType == 'sample':
             comparison = element[0:4] != 'ENSG'
         if comparison: #pourquoi ne connait pas l'element Description???? (element juste avant ceux a garder
             list.remove(element)
     return
 
-def writeARNTable():
-    '''write table (excel) containing ARN informations'''
-    ARNTable = open_workbook(ARNTableFileName)
-    ARNPhenotypeTable = open_workbook(ARNPhenotypeTableFileName)
+def writeSampleTable():
+    '''write table (excel) containing sample informations'''
+    sampleTable = open_workbook(sampleTableFileName)
+    samplePhenotypeTable = open_workbook(samplePhenotypeTableFileName)
 
-    ARNTableCopy = copy(ARNTable)
+    sampleTableCopy = copy(sampleTable)
 
     subjIDPhenList =[]
     phenTitleList = []
 
     firstTime = True
-    for row in ARNPhenotypeTable.sheet_by_index(0)._cell_values:
+    for row in samplePhenotypeTable.sheet_by_index(0)._cell_values:
         if firstTime:
             phenTitleList = row
             firstTime = False
         subjIDPhen = row [0]
         subjIDPhenList.append(subjIDPhen)
 
-    ARNTableCopy.get_sheet(0).write(0,61,phenTitleList[0])
-    ARNTableCopy.get_sheet(0).write(0,62,phenTitleList[1])
-    ARNTableCopy.get_sheet(0).write(0,63,phenTitleList[2])
-    ARNTableCopy.get_sheet(0).write(0,64,phenTitleList[3])
+    sampleTableCopy.get_sheet(0).write(0,61,phenTitleList[0])
+    sampleTableCopy.get_sheet(0).write(0,62,phenTitleList[1])
+    sampleTableCopy.get_sheet(0).write(0,63,phenTitleList[2])
+    sampleTableCopy.get_sheet(0).write(0,64,phenTitleList[3])
 
     j=0
-    for row in ARNTable.sheet_by_index(0)._cell_values:
+    for row in sampleTable.sheet_by_index(0)._cell_values:
+        print j
         i=0
         subjIDGen = ''
         for c in row[0]:
@@ -139,17 +122,17 @@ def writeARNTable():
                 if i == 2:
                     subjIDGen = subjIDGen[:-1]
                     try:
-                        rowContent = ARNPhenotypeTable.sheet_by_index(0)._cell_values[subjIDPhenList.index(subjIDGen)]
+                        rowContent = samplePhenotypeTable.sheet_by_index(0)._cell_values[subjIDPhenList.index(subjIDGen)]
                     except ValueError:
                         print 'SUBJID : ', subjIDGen, ' not find in the phenotype table'
-                    ARNTableCopy.get_sheet(0).write(j,61,rowContent[0])
-                    ARNTableCopy.get_sheet(0).write(j,62,rowContent[1])
-                    ARNTableCopy.get_sheet(0).write(j,63,rowContent[2])
-                    ARNTableCopy.get_sheet(0).write(j,64,rowContent[3])
+                    sampleTableCopy.get_sheet(0).write(j,61,rowContent[0])
+                    sampleTableCopy.get_sheet(0).write(j,62,rowContent[1])
+                    sampleTableCopy.get_sheet(0).write(j,63,rowContent[2])
+                    sampleTableCopy.get_sheet(0).write(j,64,rowContent[3])
                     break
         j+=1
 
-    ARNTableCopy.save(ARNTableFileName)
+    sampleTableCopy.save(sampleTableFileName)
     return
 
 def writeGeneTable(nameList, descriptionList):
@@ -176,9 +159,7 @@ def updateGeneTable(geneList, chrList, coordList):
     for row in geneTable.sheet_by_index(0)._cell_values:
         print rowIndex
         try:
-            # print row[0]
             listIndex = geneList.index(row[0])
-            # print listIndex
             geneTableCopy.get_sheet(0).write(rowIndex, 2, chrList[listIndex])
             geneTableCopy.get_sheet(0).write(rowIndex, 3, coordList[listIndex])
         except ValueError:
@@ -190,22 +171,75 @@ def updateGeneTable(geneList, chrList, coordList):
 
     return
 
-def writeTranscriptTable():
-    transcriptTable = open_workbook(transcriptTableFileName)
-    transcriptRPKMTable = open_workbook(transcriptRPKMFileNameTest)
-
-    transcriptTableCopy = copy(transcriptTable)
+def writeTranscriptTable(transcriptList, geneList):
+    transcriptTable = openpyxl.Workbook()
+    transcriptTableSheet = transcriptTable.get_active_sheet()
 
     rowIndex = 0
-    for row in transcriptRPKMTable.sheet_by_index(0)._cell_values:
-        print rowIndex
-        transcriptTableCopy.get_sheet(0).write(rowIndex, 0, row[0])
-        transcriptTableCopy.get_sheet(0).write(rowIndex, 1, row[1])
+    while(rowIndex < len(transcriptList)):
+        print 'rowIndex: ', rowIndex
+        transcriptTableSheet.cell(row = rowIndex, column = 0).value = transcriptList[rowIndex]
+        transcriptTableSheet.cell(row = rowIndex, column = 1).value = geneList[rowIndex]
 
         rowIndex +=1
 
+    transcriptTable.save(transcriptTableFileName)
+    return
 
-    transcriptTableCopy.save(transcriptRPKMFileNameTest)
+def writeRPKMGeneTable():
+
+    csvFileReader = open(geneRPKMFileNameTail, 'rb')
+    geneRKMTable = csv.reader(csvFileReader, delimiter = '	')
+
+    csvFileWriter = open(geneRPKMTableFileName, 'wb')
+    outputWriter = csv.writer(csvFileWriter, quotechar = '"', quoting = csv.QUOTE_MINIMAL)
+
+    outputWriter.writerow(["RPKMID", "GeneID", "SAMPID", "RPKMValue"])
+
+    rowIndex = 0
+    newRowIndex = 0
+
+    sampList = []
+
+    for row in geneRKMTable:
+        print 'rowIndex: ', rowIndex
+        colIndex = 0
+        for element in row[2:]:
+            if (rowIndex==0):
+                sampList.append(element)
+            else:
+                outputWriter.writerow([newRowIndex, row[0], sampList[colIndex], element ])
+                newRowIndex +=1
+            colIndex +=1
+        rowIndex+=1
+    return
+
+def writeRPKMTranscriptTable():
+
+    csvFileReader = open(transcriptRPKMFileName, 'rb')
+    geneRKMTable = csv.reader(csvFileReader, delimiter = '	')
+
+    csvFileWriter = open(transcriptRPKMTableFileNameExterne, 'wb')
+    outputWriter = csv.writer(csvFileWriter, quotechar = '"', quoting = csv.QUOTE_MINIMAL)
+
+    outputWriter.writerow(["RPKMID", "TranscriptID", "SAMPID", "RPKMValue"])
+
+    rowIndex = 0
+    newRowIndex = 0
+
+    sampList = []
+
+    for row in geneRKMTable:
+        print 'rowIndex: ', rowIndex
+        colIndex = 0
+        for element in row[4:]:
+            if (rowIndex==0):
+                sampList.append(element)
+            else:
+                outputWriter.writerow([newRowIndex, row[0], sampList[colIndex], element ])
+                newRowIndex +=1
+            colIndex +=1
+        rowIndex+=1
     return
 
 def removeLast(string):
@@ -216,32 +250,33 @@ def main():
     '''main function'''
     startTime = time.time()
 
-    writeTranscriptTable()
 
+    #writeSampleTable()
+    # writeRPKMTranscriptTable()
 
     endTime = time.time()-startTime
     print 'endTime : ', endTime
     return
 
 def processARNTable():
-    writeARNTable()
+    writeSampleTable()
     return
 
 def processGeneTable():
     #make table
-    ARNList, geneNameList, geneDescriptionList = extractGene(geneRPKMFileName)
+    sampleList, geneNameList, geneDescriptionList = extractGene(geneRPKMFileName)
     geneNameList = geneNameList[1:]
-    cleanList(ARNList, 'ARN')
-    cleanList(ARNList, 'ARN')
+    cleanList(sampleList, 'sample')
+    cleanList(sampleList, 'sample')
     writeGeneTable(geneNameList,geneDescriptionList)
 
-    print 'ARNList: ', ARNList, ' length: ', len(ARNList)
+    print 'sampleList: ', sampleList, ' length: ', len(sampleList)
     print 'nameList: ', geneNameList, ' length: ', len(geneNameList)
     print 'descriptionList', geneDescriptionList, 'length: ', len(geneDescriptionList)
 
     #update table
 
-    gene, chr, coord = extractTranscript(transcriptRPKMFileName)
+    transcript, gene, chr, coord = extractTranscript(transcriptRPKMFileNameTest)
 
 
     gene = gene[1:]
@@ -249,6 +284,8 @@ def processGeneTable():
     coord = coord[1:]
 
     gene = map(removeLast, gene)
+    chr = map(removeLast, chr) # a faire plus tard
+    coord = map(removeLast, coord)
 
     # print 'gene : ', gene
     # print 'chr : ', chr
@@ -259,7 +296,16 @@ def processGeneTable():
     return
 
 def processTranscriptTable():
-    writeTranscriptTable()
+    transcript, gene, chr, coord = extractTranscript(transcriptRPKMFileName)
+
+    gene = map(removeLast, gene)
+    transcript = map(removeLast, transcript)
+
+    writeTranscriptTable(transcript, gene)
+    return
+
+def processRPKMGeneTable():
+    writeRPKMGeneTable()
     return
 
 main()
